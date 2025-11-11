@@ -15,6 +15,7 @@ env:
 jobs:
     unit_testing:
         name: unit testing
+
         runs-on: ubuntu-latest
         steps:
             - name: checkout Repository
@@ -24,9 +25,65 @@ jobs:
               uses: actions/setup-node@v3
               with:
                 node-version: 18
+        
+            - name: NPM Cache Dependencies
+              uses: actions/cache@v4
+              with:
+                path: node_modules
+                key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
             
             - name: install dependencies
               run: npm install
 
             - name: unit testing
               run: npm test
+
+            - name: Archiving Unit Testing
+              if: always()
+              uses: actions/upload-artifact@v3
+              with:
+                name: Mocha-Test-Result
+                path: test-results.xml
+
+
+    code-coverage:
+        name: code coverage
+        runs-on: ubuntu-latest
+        steps:
+            - name: checkout Repository
+              uses: actions/checkout@v4
+              
+            - name: Setup Nodejs Version - 18
+              uses: actions/setup-node@v3
+              with:
+                node-version: 18
+
+            - name: NPM Cache Dependencies
+              uses: actions/cache@v4
+              with:
+                path: node_modules
+                key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+        
+            - name: install dependencies
+              run: npm install
+
+            - name: unit testing
+              continue-on-error: true
+              run: npm run coverage
+
+            - name: Archiving Unit Testing
+              uses: actions/upload-artifact@v3
+              with:
+                name: code-coverage-Result
+                path: coverage
+                retention-days: 5
+
+
+
+#        strategy:
+#            matrix:
+#                nodeJs-version: [18, 19, 20]   # key could be any string 
+#                operating-system: [ubuntu-latest, macos-latest]   # key could be any string 
+#               exclude:
+#                   - nodeJs-version: 18
+#                    operating-system: macos-latest
