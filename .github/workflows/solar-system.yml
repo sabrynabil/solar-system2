@@ -40,7 +40,7 @@ jobs:
 
             - name: Archiving Unit Testing
               if: always()
-              uses: actions/upload-artifact@v3
+              uses: actions/upload-artifact@v4
               with:
                 name: Mocha-Test-Result
                 path: test-results.xml
@@ -72,7 +72,7 @@ jobs:
               run: npm run coverage
 
             - name: Archiving Unit Testing
-              uses: actions/upload-artifact@v3
+              uses: actions/upload-artifact@v4
               with:
                 name: code-coverage-Result
                 path: coverage
