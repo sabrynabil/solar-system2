@@ -161,13 +161,12 @@ jobs:
         - name: Set up Kubectl
           uses: azure/setup-kubectl@v4
           with:
-            version: 'v1.34.2'
+            version: 'v1.26.0'
           
-        - name: Set up Configfile
-          uses: azure/k8s-set-context@v4
+        - name: Create Kind cluster
+          uses: helm/kind-action@v1
           with:
-            method: kubeconfig
-            kubeconfig: ${{ secrets.KUBE_CONFIG }}
+            cluster_name: mycluster
 
         - name: Fetch Kubernetes Cluster
           run: |
