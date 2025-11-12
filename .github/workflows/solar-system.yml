@@ -110,7 +110,7 @@ jobs:
                 ${{ vars.DOCKERHUB_USERNAME }}/solar-system2:${{ github.sha }}
 
                 echo "testing url using wget"
-                wget -o -q - 127.0.0.1/live | grep live
+                wget -qO- http://127.0.0.1:3000/live | grep live
             
             - name: Docker Push
               uses: docker/build-push-action@v6
