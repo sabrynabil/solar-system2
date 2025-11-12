@@ -1,1 +1,177 @@
-https://github.c
+name: solar system workflow
+
+on:
+    workflow_dispatch:
+    push:
+        branches:
+            - main
+            - 'feature/*'
+
+env:
+    MONGO_URI: 'mongodb+srv://supercluster.d83jj.mongodb.net/superData'
+    MONGO_USERNAME: ${{ vars.MONGO_USERNAME }} 
+    MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
+
+jobs:
+    unit_testing:
+        name: unit testing
+        services: 
+            mongo-db:
+                image: siddharth67/mongo-db:non-prod
+                ports:
+                    - 27017:27017
+        env:
+            MONGO_URI: 'mongodb://localhost:27017/superData'
+            MONGO_USERNAME: non-prod-user
+            MONGO_PASSWORD: non-prod-password
+        runs-on: ubuntu-latest
+        steps:
+            - name: checkout Repository
+              uses: actions/checkout@v4
+              
+            - name: Setup Nodejs Version - 18
+              uses: actions/setup-node@v3
+              with:
+                node-version: 18
+        
+            - name: NPM Cache Dependencies
+              uses: actions/cache@v4
+              with:
+                path: node_modules
+                key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+            
+            - name: install dependencies
+              run: npm install
+
+            - name: unit testing
+              run: npm test
+
+            - name: Archiving Unit Testing
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                name: Mocha-Test-Result
+                path: test-results.xml
+
+
+    code-coverage:
+        name: code coverage
+        runs-on: ubuntu-latest
+        container:
+            image: node:18
+        services: 
+            mongo-db:
+                image: siddharth67/mongo-db:non-prod
+                options:
+                    --name mongodb
+        env:
+            MONGO_URI: 'mongodb://mongodb:27017/superData'
+            MONGO_USERNAME: non-prod-user
+            MONGO_PASSWORD: non-prod-password
+        steps:
+            - name: checkout Repository
+              uses: actions/checkout@v4
+              
+           # - name: Setup Nodejs Version - 18
+            #  uses: actions/setup-node@v3
+             # with:
+              #  node-version: 18    because the job running in the container no need to install nodejs
+
+            - name: NPM Cache Dependencies
+              uses: actions/cache@v4
+              with:
+                path: node_modules
+                key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+        
+            - name: install dependencies
+              run: npm install
+
+            - name: unit testing
+              continue-on-error: true
+              run: npm run coverage
+
+            - name: Archiving Unit Testing
+              uses: actions/upload-artifact@v4
+              with:
+                name: code-coverage-Result
+                path: coverage
+                retention-days: 5
+
+    docker:
+        name: Conterinzation
+        needs: [unit_testing, code-coverage]
+        permissions:
+            packages: write
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: checkout Repository
+              uses: actions/checkout@v4
+              
+            - name: Login to Docker Hub
+              uses: docker/login-action@v3
+              with:
+                username: ${{ vars.DOCKERHUB_USERNAME }}
+                password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+
+            - name: Login to GHCR   #github container Registery
+              uses: docker/login-action@v3
+              with:
+                registry: ghcr.io
+                username: ${{ github.repository_owner }}
+                password: ${{ secrets.GITHUB_TOKEN }}
+        
+            - name: Docker Build for testing
+              uses: docker/build-push-action@v6
+              with:
+                context: .
+                push: false
+                tags: ${{ vars.DOCKERHUB_USERNAME }}/solar-system2:${{ github.sha }}
+            
+            - name: Docker run image for testing
+              run: |
+                docker images
+                docker run --name solar-system2 -d \
+                -p 3000:3000 \
+                -e MONGO_URI=$MONGO_URI \
+                -e MONGO_USERNAME=$MONGO_USERNAME \
+                -e MONGO_PASSWORD=$MONGO_PASSWORD \
+                ${{ vars.DOCKERHUB_USERNAME }}/solar-system2:${{ github.sha }}
+
+                echo "testing url using wget"
+                wget -qO- http://127.0.0.1:3000/live | grep live
+            
+            - name: Container Registery Push  # push the image in docker hub and GHCR
+              uses: docker/build-push-action@v6
+              with:
+                context: .
+                push: true
+                tags: |
+                  ${{ vars.DOCKERHUB_USERNAME }}/solar-system2:${{ github.sha }}     
+                  ghcr.io/${{ github.repository_owner }}/solar-system2:${{ github.sha }}     
+
+    dev-deploy:
+      needs: docker
+      runs-on: ubuntu-latest
+      steps:
+        - name: checkout Repository
+          uses: actions/checkout@v4
+
+        - name: Set up Kubectl
+          uses: azure/setup-kubectl@v4
+          with:
+            version: 'v1.26.0'
+          
+        - name: Set up Configfile
+          uses: azure/k8s-set-context@v4
+          with:
+            method: kubeconfig
+            kubeconfig: ${{ secrets.KUBE_CONFIG }}
+
+        - name: Fetch Kubernetes Cluster
+          run: |
+            kubectl version --short
+            echo -----------------------------------------------------------
+            kubectl get nodes
+          
